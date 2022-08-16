@@ -1,5 +1,5 @@
 # CosmWasm Plus
-
+//We are stewards of the space.
 [![CircleCI](https://circleci.com/gh/CosmWasm/cw-plus/tree/main.svg?style=shield)](https://circleci.com/gh/CosmWasm/cw-plus/tree/main)
 
 | Specification | Crates.io                                                                                             | Docs                                                                | Coverage                                                                                                                                  |
