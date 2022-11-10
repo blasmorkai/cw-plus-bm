@@ -10,32 +10,34 @@ use cw_utils::Expiration;
 #[serde(rename_all = "snake_case")]
 pub enum Cw20QueryMsg {
     /// Returns the current balance of the given address, 0 if unset.
-    /// Return type: BalanceResponse.
+    /// Return type: BalanceResponse.   // struct BalanceResponse { balance: Uint128,}
     Balance { address: String },
     /// Returns metadata on the contract - name, decimals, supply, etc.
-    /// Return type: TokenInfoResponse.
+    /// Return type: TokenInfoResponse.  // struct TokenInfoResponse {name: String, symbol: String, decimals: u8, total_supply: Uint128,}
     TokenInfo {},
     /// Only with "allowance" extension.
     /// Returns how much spender can use from owner account, 0 if unset.
-    /// Return type: AllowanceResponse.
+    /// Return type: AllowanceResponse.  // pub struct AllowanceResponse {allowance Uint128, expires: Expiration}
+                                         // pub enum Expiration {AtHeight(u64),AtTime(Timestamp),Never {},}
     Allowance { owner: String, spender: String },
     /// Only with "mintable" extension.
     /// Returns who can mint and the hard cap on maximum tokens after minting.
-    /// Return type: MinterResponse.
+    /// Return type: MinterResponse.    // struct MinterResponse { minter: String, cap: Option<Uint128>,}
     Minter {},
     /// Only with "marketing" extension
     /// Returns more metadata on the contract to display in the client:
     /// - description, logo, project url, etc.
-    /// Return type: MarketingInfoResponse.
+    /// Return type: MarketingInfoResponse.   // pub struct MarketingInfoResponse { project: Option<String>,description: Option<String>,logo: Option<LogoInfo>,marketing: Option<Addr>,}
     MarketingInfo {},
     /// Only with "marketing" extension
     /// Downloads the embedded logo data (if stored on chain). Errors if no logo data stored for
     /// this contract.
-    /// Return type: DownloadLogoResponse.
+    /// Return type: DownloadLogoResponse.  // pub struct DownloadLogoResponse { pub mime_type: String, pub data: Binary,}
     DownloadLogo {},
     /// Only with "enumerable" extension (and "allowances")
     /// Returns all allowances this owner has approved. Supports pagination.
-    /// Return type: AllAllowancesResponse.
+    /// Return type: AllAllowancesResponse.      // struct AllAllowancesResponse {allowances: Vec<AllowanceInfo>,}
+                                                // struct AllowanceInfo { spender: String, allowance: Uint128, expires: Expiration,}
     AllAllowances {
         owner: String,
         start_after: Option<String>,

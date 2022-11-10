@@ -24,15 +24,25 @@ pub struct MinterData {
 }
 
 impl TokenInfo {
+    // mint: Option<MinterData>
+    // as_ref() casts Option<MinterData> to Option<&MinterData>
+    // and_then(|| ) returns None if the option is None, otherwise calls f with the wrapped value and returns the result
     pub fn get_cap(&self) -> Option<Uint128> {
         self.mint.as_ref().and_then(|v| v.cap)
     }
 }
 
+// Token for this cw20 contract is defined
 pub const TOKEN_INFO: Item<TokenInfo> = Item::new("token_info");
+// pub struct MarketingInfoResponse { project: Option<String>,description: Option<String>,logo: Option<LogoInfo>,marketing: Option<Addr>,}
 pub const MARKETING_INFO: Item<MarketingInfoResponse> = Item::new("marketing_info");
+// pub enum Logo {Url(String),Embedded(EmbeddedLogo),}
 pub const LOGO: Item<Logo> = Item::new("logo");
+
 pub const BALANCES: Map<&Addr, Uint128> = Map::new("balance");
+
+// pub struct AllowanceResponse {allowance Uint128, expires: Expiration}
+// pub enum Expiration {AtHeight(u64),AtTime(Timestamp),Never {},}
 pub const ALLOWANCES: Map<(&Addr, &Addr), AllowanceResponse> = Map::new("allowance");
 // TODO: After https://github.com/CosmWasm/cw-plus/issues/670 is implemented, replace this with a `MultiIndex` over `ALLOWANCES`
 pub const ALLOWANCES_SPENDER: Map<(&Addr, &Addr), AllowanceResponse> =

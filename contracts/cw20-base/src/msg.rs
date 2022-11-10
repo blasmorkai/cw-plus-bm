@@ -26,7 +26,8 @@ pub struct InstantiateMsg {
 
 impl InstantiateMsg {
     pub fn get_cap(&self) -> Option<Uint128> {
-        self.mint.as_ref().and_then(|v| v.cap)
+        self.mint.as_ref().and_then(|v| v.cap)      // as_ref() casts Option<MinterData> to Option<&MinterData>
+                                                                    // and_then(|| ) returns None if the option is None, otherwise calls f with the wrapped value and returns the result
     }
 
     pub fn validate(&self) -> StdResult<()> {
@@ -73,22 +74,24 @@ impl InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     /// Returns the current balance of the given address, 0 if unset.
-    /// Return type: BalanceResponse.
+    /// Return type: BalanceResponse.   // struct BalanceResponse { balance: Uint128,}
     Balance { address: String },
     /// Returns metadata on the contract - name, decimals, supply, etc.
-    /// Return type: TokenInfoResponse.
+    /// Return type: TokenInfoResponse.   // struct TokenInfoResponse {name: String, symbol: String, decimals: u8, total_supply: Uint128,}
     TokenInfo {},
     /// Only with "mintable" extension.
     /// Returns who can mint and the hard cap on maximum tokens after minting.
-    /// Return type: MinterResponse.
+    /// Return type: MinterResponse.      // struct MinterResponse { minter: String, cap: Option<Uint128>,}
     Minter {},
     /// Only with "allowance" extension.
     /// Returns how much spender can use from owner account, 0 if unset.
-    /// Return type: AllowanceResponse.
+    /// Return type: AllowanceResponse.   // struct AllAllowancesResponse {allowances: Vec<AllowanceInfo>,}
+    ///                                   // struct AllowanceInfo { spender: String, allowance: Uint128, expires: Expiration,}
     Allowance { owner: String, spender: String },
     /// Only with "enumerable" extension (and "allowances")
     /// Returns all allowances this owner has approved. Supports pagination.
-    /// Return type: AllAllowancesResponse.
+    /// Return type: AllAllowancesResponse.   // struct AllAllowancesResponse {allowances: Vec<AllowanceInfo>,}
+    ///                                       // struct AllowanceInfo { spender: String, allowance: Uint128, expires: Expiration,}
     AllAllowances {
         owner: String,
         start_after: Option<String>,
@@ -96,7 +99,8 @@ pub enum QueryMsg {
     },
     /// Only with "enumerable" extension (and "allowances")
     /// Returns all allowances this spender has been granted. Supports pagination.
-    /// Return type: AllSpenderAllowancesResponse.
+    /// Return type: AllSpenderAllowancesResponse.  // struct AllSpenderAllowancesResponse {allowances: Vec<SpenderAllowanceInfo>,}
+    ///                                               // struct SpenderAllowanceInfo {owner: String, allowance: Uint128, expires: Expiration,}
     AllSpenderAllowances {
         spender: String,
         start_after: Option<String>,
