@@ -104,12 +104,14 @@ pub fn instantiate(
     // create initial accounts
     let total_supply = create_accounts(&mut deps, &msg.initial_balances)?;
 
+    // check that total supply has not exceeded the minting cap
     if let Some(limit) = msg.get_cap() {
         if total_supply > limit {
             return Err(StdError::generic_err("Initial supply greater than cap").into());
         }
     }
 
+    // check that the minter address (if set) is valid
     let mint = match msg.mint {
         Some(m) => Some(MinterData {
             minter: deps.api.addr_validate(&m.minter)?,
@@ -160,6 +162,8 @@ pub fn create_accounts(
     deps: &mut DepsMut,
     accounts: &[Cw20Coin],
 ) -> Result<Uint128, ContractError> {
+    // struct Cw20Coin {address: String, amount: Uint128,}
+    // The accounts are saved in the BALANCES Map
     validate_accounts(accounts)?;
 
     let mut total_supply = Uint128::zero();
@@ -173,10 +177,13 @@ pub fn create_accounts(
 }
 
 pub fn validate_accounts(accounts: &[Cw20Coin]) -> Result<(), ContractError> {
+    // struct Cw20Coin {address: String, amount: Uint128,}
+    // Create an array of the address, sorting and removing consecutive repeated elements
     let mut addresses = accounts.iter().map(|c| &c.address).collect::<Vec<_>>();
     addresses.sort();
     addresses.dedup();
 
+    // if any addresses has been removed, there was more than one entry for at least one account
     if addresses.len() != accounts.len() {
         Err(ContractError::DuplicateInitialBalanceAddresses {})
     } else {

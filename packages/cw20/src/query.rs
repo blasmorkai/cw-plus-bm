@@ -36,7 +36,7 @@ pub enum Cw20QueryMsg {
     DownloadLogo {},
     /// Only with "enumerable" extension (and "allowances")
     /// Returns all allowances this owner has approved. Supports pagination.
-    /// Return type: AllAllowancesResponse.      // struct AllAllowancesResponse {allowances: Vec<AllowanceInfo>,}
+    /// Return type: AllAllowancesResponse.     // struct AllAllowancesResponse {allowances: Vec<AllowanceInfo>,}
                                                 // struct AllowanceInfo { spender: String, allowance: Uint128, expires: Expiration,}
     AllAllowances {
         owner: String,
@@ -45,7 +45,7 @@ pub enum Cw20QueryMsg {
     },
     /// Only with "enumerable" extension
     /// Returns all accounts that have balances. Supports pagination.
-    /// Return type: AllAccountsResponse.
+    /// Return type: AllAccountsResponse.     // struct AllAccountsResponse {accounts: Vec<String>}
     AllAccounts {
         start_after: Option<String>,
         limit: Option<u32>,

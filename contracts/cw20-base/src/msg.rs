@@ -25,11 +25,12 @@ pub struct InstantiateMsg {
 }
 
 impl InstantiateMsg {
+    // Remaining minting cap if it exists. {minter, cap} -> {cap}
     pub fn get_cap(&self) -> Option<Uint128> {
-        self.mint.as_ref().and_then(|v| v.cap)      // as_ref() casts Option<MinterData> to Option<&MinterData>
-                                                                    // and_then(|| ) returns None if the option is None, otherwise calls f with the wrapped value and returns the result
+        self.mint.as_ref().and_then(|v| v.cap)
     }
 
+    // Check name and symbol
     pub fn validate(&self) -> StdResult<()> {
         // Check name, symbol, decimals
         if !self.has_valid_name() {
@@ -49,6 +50,7 @@ impl InstantiateMsg {
     }
 
     fn has_valid_name(&self) -> bool {
+        // returns a byte slice, then its length is challenged. Allowed: [3,50]
         let bytes = self.name.as_bytes();
         if bytes.len() < 3 || bytes.len() > 50 {
             return false;
@@ -57,6 +59,7 @@ impl InstantiateMsg {
     }
 
     fn has_valid_symbol(&self) -> bool {
+        // returns a byte slice, then we make sure the symbols are allowed. Allowed [3,12]
         let bytes = self.symbol.as_bytes();
         if bytes.len() < 3 || bytes.len() > 12 {
             return false;
@@ -100,7 +103,7 @@ pub enum QueryMsg {
     /// Only with "enumerable" extension (and "allowances")
     /// Returns all allowances this spender has been granted. Supports pagination.
     /// Return type: AllSpenderAllowancesResponse.  // struct AllSpenderAllowancesResponse {allowances: Vec<SpenderAllowanceInfo>,}
-    ///                                               // struct SpenderAllowanceInfo {owner: String, allowance: Uint128, expires: Expiration,}
+    ///                                             // struct SpenderAllowanceInfo {owner: String, allowance: Uint128, expires: Expiration,}
     AllSpenderAllowances {
         spender: String,
         start_after: Option<String>,
@@ -108,7 +111,7 @@ pub enum QueryMsg {
     },
     /// Only with "enumerable" extension
     /// Returns all accounts that have balances. Supports pagination.
-    /// Return type: AllAccountsResponse.
+    /// Return type: AllAccountsResponse.           // struct AllAccountsResponse {accounts: Vec<String>}
     AllAccounts {
         start_after: Option<String>,
         limit: Option<u32>,
@@ -134,6 +137,7 @@ mod tests {
 
     #[test]
     fn validate_instantiatemsg_name() {
+        // name length allowed [3,50]
         // Too short
         let mut msg = InstantiateMsg {
             name: str::repeat("a", 2),
@@ -152,6 +156,7 @@ mod tests {
 
     #[test]
     fn validate_instantiatemsg_symbol() {
+        // symbol lenght Allowed [3,12]
         // Too short
         let mut msg = InstantiateMsg {
             symbol: str::repeat("a", 2),
@@ -167,10 +172,12 @@ mod tests {
         msg.symbol = str::repeat("a", 13);
         assert!(!msg.has_valid_symbol());
 
-        // Has illegal char
+        // Legal chars [65,90] U [97,122]
+        // Has illegal char.
         let illegal_chars = [[64u8], [91u8], [123u8]];
         illegal_chars.iter().for_each(|c| {
             let c = std::str::from_utf8(c).unwrap();
+            // the character has to be repeated at least three times to be able to use msg.has_valid_sympol() and not refused by length
             msg.symbol = str::repeat(c, 3);
             assert!(!msg.has_valid_symbol());
         });
