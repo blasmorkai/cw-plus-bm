@@ -13,6 +13,7 @@ pub struct InstantiateMarketingInfo {
     pub logo: Option<Logo>,
 }
 
+// USE CASE 1: Options as a named fields in a struct
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, PartialEq)]
 #[cfg_attr(test, derive(Default))]
 pub struct InstantiateMsg {
@@ -26,6 +27,7 @@ pub struct InstantiateMsg {
 
 impl InstantiateMsg {
     // Remaining minting cap if it exists. {minter, cap} -> {cap}
+    // USE CASE 2: A function will return a value or not based on the contract initial configuration
     pub fn get_cap(&self) -> Option<Uint128> {
         self.mint.as_ref().and_then(|v| v.cap)
     }
@@ -73,6 +75,7 @@ impl InstantiateMsg {
     }
 }
 
+// USE CASE 3: Enums of struct used to define QueryMsgs or ExecuteMsgs
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {

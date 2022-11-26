@@ -63,7 +63,13 @@ impl<'a> Claims<'a> {
         cap: Option<Uint128>,
     ) -> StdResult<Uint128> {
         let mut to_send = Uint128::zero();
+        // struct Claim {amount: Uint128,release_at: Expiration,}
+        // For addr, we look at each claim and if it has expired we add it to the total count to return. (provided no cap exceeded)
+        // If it has not expired, Vec<Claim> for address will only keep those elements (update)
+        //        how it works: we return false in let (_send, waiting) = ..., and are stored in the waiting Vec<claim> (represented by _)
         self.0.update(storage, addr, |claim| -> StdResult<_> {
+            // As partition is used, we get a tuple of two vectors, the one with the Claims that return true in the closure (_send)
+            // and the one that returns false in the closure. (waiting) and are updated in CLAIMS as a result of its closure.
             let (_send, waiting): (Vec<_>, _) =
                 claim.unwrap_or_default().into_iter().partition(|c| {
                     // if mature and we can pay fully, then include in _send
@@ -81,9 +87,9 @@ impl<'a> Claims<'a> {
                         false
                     }
                 });
-            Ok(waiting)
+            Ok(waiting) // Update CLAIMS , index addr will only keep the Claims that have not expired.
         })?;
-        Ok(to_send)
+        Ok(to_send) // Return Vec<Claim> with the claims that have already expired
     }
 
     pub fn query_claims<Q: CustomQuery>(

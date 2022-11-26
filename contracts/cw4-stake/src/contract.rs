@@ -33,6 +33,8 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     let api = deps.api;
+    // Admin struct helper function => set = save
+    // Validation of the admin address if it is Some.
     ADMIN.set(deps.branch(), maybe_addr(api, msg.admin)?)?;
 
     // min_bond is at least 1, so 0 stake -> non-membership
@@ -45,6 +47,8 @@ pub fn instantiate(
         unbonding_period: msg.unbonding_period,
     };
     CONFIG.save(deps.storage, &config)?;
+
+    // So far, no tokens have been staked
     TOTAL.save(deps.storage, &0)?;
 
     Ok(Response::default())
@@ -69,9 +73,14 @@ pub fn execute(
         ExecuteMsg::RemoveHook { addr } => {
             Ok(HOOKS.execute_remove_hook(&ADMIN, deps, info, api.addr_validate(&addr)?)?)
         }
+        // Info.funds is passed as a Balance parameter to make use of its helper functions.
+        // Balance is of type Native(NativeBalance) -- struct NativeBalance(pub Vec<Coin>);
         ExecuteMsg::Bond {} => execute_bond(deps, env, Balance::from(info.funds), info.sender),
         ExecuteMsg::Unbond { tokens: amount } => execute_unbond(deps, env, info, amount),
         ExecuteMsg::Claim {} => execute_claim(deps, env, info),
+        // execute_receive will end up calling execute_bond with balance : Cw20CoinVerified
+        // execute_bond (.... balance: Cw20CoinVerified {contract_address, Cw20ReceiveMsg...amount }
+        //                    sender: user that requested the cw20 contract to send this)
         ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg),
     }
 }
@@ -87,11 +96,20 @@ pub fn execute_bond(
     // ensure the sent denom was proper
     // NOTE: those clones are not needed (if we move denom, we return early),
     // but the compiler cannot see that (yet...)
+  
+    // enum Denom {Native(String), Cw20(Addr),}
+    // enum Balance { Native(NativeBalance), Cw20(Cw20CoinVerified),}
+        // struct NativeBalance(pub Vec<Coin>);
+        // struct Cw20CoinVerified {pub address: Addr, pub amount: Uint128,}
+
     let amount = match (&cfg.denom, &amount) {
+        // If we did set up the config denom as String and the info.funds transferred with the message is a Vec<Coin> 
         (Denom::Native(want), Balance::Native(have)) => must_pay_funds(have, want),
+        // If we did set up the config denom as an Addr, and the balance is {Addr, Uint128}
+        // This will deal with ExecuteMsg::Receive(msg) => execute_receive(deps, env, info, msg) =>
         (Denom::Cw20(want), Balance::Cw20(have)) => {
-            if want == &have.address {
-                Ok(have.amount)
+            if want == &have.address {          // Making sure that balance.address is the same set up on CONFIG.denom.
+                Ok(have.amount)                 // Returning balance.amount
             } else {
                 Err(ContractError::InvalidDenom(want.into()))
             }
@@ -101,11 +119,14 @@ pub fn execute_bond(
         )),
     }?;
 
-    // update the sender's stake
+    // If we get here we already know that the denom sent is the one set on CONFIG. We only have to worry on what to do with amount.
+    // update the sender's stake. Getting back the new total amount of tokens bonded by that user.
     let new_stake = STAKE.update(deps.storage, &sender, |stake| -> StdResult<_> {
-        Ok(stake.unwrap_or_default() + amount)
+        Ok(stake.unwrap_or_default() + amount)      // If the sender has not staked before it triggers .unwrap_or_DEFAULT()
     })?;
 
+    // MEMBERS and TOTAL is updated, 
+    // List of Submessages are returned to inform registered Hook addresses of sender weight changes.
     let messages = update_membership(
         deps.storage,
         sender.clone(),
@@ -132,6 +153,7 @@ pub fn execute_receive(
     // This cannot be fully trusted (the cw20 contract can fake it), so only use it for actions
     // in the address's favor (like paying/bonding tokens, not withdrawls)
     let msg: ReceiveMsg = from_slice(&wrapper.msg)?;
+    // We create a Balance of type Cw20CoinVerified {contract_address, Cw20ReceiveMsg...amount }
     let balance = Balance::Cw20(Cw20CoinVerified {
         address: info.sender,
         amount: wrapper.amount,
@@ -139,6 +161,8 @@ pub fn execute_receive(
     let api = deps.api;
     match msg {
         ReceiveMsg::Bond {} => {
+            // execute_bond (.... balance: Cw20CoinVerified {contract_address, Cw20ReceiveMsg...amount }
+            //                    sender: user that requested the cw20 contract to send this)
             execute_bond(deps, env, balance, api.addr_validate(&wrapper.sender)?)
         }
     }
@@ -150,13 +174,14 @@ pub fn execute_unbond(
     info: MessageInfo,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    // reduce the sender's stake - aborting if insufficient
+    // reduce the sender's stake - aborting if insufficient as STAKE value is unsigned.
     let new_stake = STAKE.update(deps.storage, &info.sender, |stake| -> StdResult<_> {
         Ok(stake.unwrap_or_default().checked_sub(amount)?)
     })?;
 
     // provide them a claim
     let cfg = CONFIG.load(deps.storage)?;
+    // Map<&Addr, Vec<Claim>> The info.sender will get its Vec<Claim> updated by adding/pushing a Claim { amount, release_at }
     CLAIMS.create_claim(
         deps.storage,
         &info.sender,
@@ -164,6 +189,7 @@ pub fn execute_unbond(
         cfg.unbonding_period.after(&env.block),
     )?;
 
+    // Update MEMBERS, TOTAL and return a Vec<SubMsg> to alert the Hooks
     let messages = update_membership(
         deps.storage,
         info.sender.clone(),
@@ -179,22 +205,24 @@ pub fn execute_unbond(
         .add_attribute("sender", info.sender))
 }
 
+// If only one coin is sent with the message and the denom is the one set up in the staking contract, it returns the amount to bond.
 pub fn must_pay_funds(balance: &NativeBalance, denom: &str) -> Result<Uint128, ContractError> {
-    match balance.0.len() {
+    match balance.0.len() {                             // How many coins have been transferred? How many elements in Vec<Coin>?
         0 => Err(ContractError::NoFunds {}),
         1 => {
-            let balance = &balance.0;
-            let payment = balance[0].amount;
-            if balance[0].denom == denom {
-                Ok(payment)
+            let balance = &balance.0;        // balance -> Vec<Coin>
+            let payment = balance[0].amount;    // payment -> the amount from the first coin transferred
+            if balance[0].denom == denom {               // Making sure that the first coin denom is the denom wanting to stake
+                Ok(payment)                              // the amount of coins transferred/to_be_bonded is returned
             } else {
-                Err(ContractError::MissingDenom(denom.to_string()))
+                Err(ContractError::MissingDenom(denom.to_string())) //The coin transferred is not the one registed in CONFIG.
             }
         }
-        _ => Err(ContractError::ExtraDenoms(denom.to_string())),
+        _ => Err(ContractError::ExtraDenoms(denom.to_string())), // More than one coin transferred with the message.
     }
 }
 
+// Update MEMBERS, TOTAL and return a Vec<SubMsg> to alert the Hooks of the weight changes
 fn update_membership(
     storage: &mut dyn Storage,
     sender: Addr,
@@ -212,17 +240,24 @@ fn update_membership(
     }
     // otherwise, record change of weight
     match new.as_ref() {
-        Some(w) => MEMBERS.save(storage, &sender, w, height),
-        None => MEMBERS.remove(storage, &sender, height),
+        Some(w) => MEMBERS.save(storage, &sender, w, height),  // The weight is saved for a certain sender and height
+        None => MEMBERS.remove(storage, &sender, height),                  // No weight so... delete entry for sender and height
     }?;
 
-    // update total
+    // update total. Increasing it by the difference of current and previous balance.
     TOTAL.update(storage, |total| -> StdResult<_> {
         Ok(total + new.unwrap_or_default() - old.unwrap_or_default())
     })?;
 
+    // MemberDiff::new(...) returns MemberDiff { key: addr.into(), old: old_weight, new: new_weight, }
     // alert the hooks
     let diff = MemberDiff::new(sender, old, new);
+
+    // struct MemberChangedHookMsg {diffs: Vec<MemberDiff>}
+    // MemberChangedHookMsg.one(diff: MemberDiff) -> Self { MemberChangedHookMsg { diffs: vec![diff] }}
+
+    // It SEEMS it creates a submessage for all the hook addresses informing of MemberDiff { key: addr.into(), old: old_weight, new: new_weight, }
+    // These submessages will be returned to the caller function to send them from there.
     HOOKS.prepare_hooks(storage, |h| {
         MemberChangedHookMsg::one(diff.clone())
             .into_cosmos_msg(h)
@@ -230,6 +265,8 @@ fn update_membership(
     })
 }
 
+// Getting a weight based on the total amount of tokens bonded/staked 
+// Tokens per weight is not affected by the number of tokens bonded, it is a constant.
 fn calc_weight(stake: Uint128, cfg: &Config) -> Option<u64> {
     if stake < cfg.min_bond {
         None
@@ -244,6 +281,9 @@ pub fn execute_claim(
     env: Env,
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
+    // CLAIMS.claim_tokens() - Claims(Map<&Addr, Vec<Claim>>)
+    // Update CLAIMS , addr:info.sender will only keep the Claims that have not expired registered in CLAIMS.
+    // Return the addition of the tokens that have already expired and whose claims are no longer stored in Vec<Claim>
     let release = CLAIMS.claim_tokens(deps.storage, &info.sender, &env.block, None)?;
     if release.is_zero() {
         return Err(ContractError::NothingToClaim {});
@@ -251,7 +291,9 @@ pub fn execute_claim(
 
     let config = CONFIG.load(deps.storage)?;
     let (amount_str, message) = match &config.denom {
-        Denom::Native(denom) => {
+        // Config { ... pub denom: Denom, ..} //enum Denom {Native(String), Cw20(Addr),}
+        //  The contract initially received tokens on the ExecuteMsg with info.funds (No Cw20ReceiveMsg)
+        Denom::Native(denom) => {       
             let amount_str = coin_to_string(release, denom.as_str());
             let amount = coins(release.u128(), denom);
             let message = SubMsg::new(BankMsg::Send {
@@ -260,6 +302,8 @@ pub fn execute_claim(
             });
             (amount_str, message)
         }
+        //  The contract initially received tokens on a Cw20ReceiveMsg, from another contract
+        //  addr is the address of the contract
         Denom::Cw20(addr) => {
             let amount_str = coin_to_string(release, addr.as_str());
             let transfer = Cw20ExecuteMsg::Transfer {

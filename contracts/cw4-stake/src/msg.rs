@@ -53,29 +53,31 @@ pub enum ReceiveMsg {
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
     /// Claims shows the tokens in process of unbonding for this address
+    //  struct ClaimsResponse { pub claims: Vec<Claim>,}
     Claims {
         address: String,
     },
-    // Show the number of tokens currently staked by this address.
+    // Show the number of tokens currently staked by this address.      
+    // struct StakedResponse { pub stake: Uint128, pub denom: Denom,}
     Staked {
         address: String,
     },
 
-    /// Return AdminResponse
+    /// Return AdminResponse            struct AdminResponse {pub admin: Option<String>,}  
     Admin {},
-    /// Return TotalWeightResponse
+    /// Return TotalWeightResponse      struct TotalWeightResponse {weight: u64,}   
     TotalWeight {},
-    /// Returns MembersListResponse
+    /// Returns MembersListResponse     struct MemberListResponse {pub members: Vec<Member>,}
     ListMembers {
         start_after: Option<String>,
         limit: Option<u32>,
     },
-    /// Returns MemberResponse
+    /// Returns MemberResponse          struct MemberResponse { pub weight: Option<u64>,}
     Member {
         addr: String,
         at_height: Option<u64>,
     },
-    /// Shows all registered hooks. Returns HooksResponse.
+    /// Shows all registered hooks. Returns HooksResponse.  struct HooksResponse { pub hooks: Vec<String>,}
     Hooks {},
 }
 

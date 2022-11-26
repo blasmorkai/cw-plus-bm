@@ -104,12 +104,18 @@ pub fn instantiate(
     // create initial accounts
     let total_supply = create_accounts(&mut deps, &msg.initial_balances)?;
 
+    // USE CASE 2: A function will return a value or not based on the contract initial configuration
+    // if let Some ()
+
     // check that total supply has not exceeded the minting cap
     if let Some(limit) = msg.get_cap() {
         if total_supply > limit {
             return Err(StdError::generic_err("Initial supply greater than cap").into());
         }
     }
+
+    // USE CASE 1: Options as a named fields in a struct
+    // let mint = match msg.mint { Some() => {}, None => {}}
 
     // check that the minter address (if set) is valid
     let mint = match msg.mint {
@@ -203,6 +209,8 @@ pub fn execute(
             execute_transfer(deps, env, info, recipient, amount)
         }
         ExecuteMsg::Burn { amount } => execute_burn(deps, env, info, amount),
+        // Send is a base message to transfer tokens to a contract and trigger an action
+        // on the receiving contract.
         ExecuteMsg::Send {
             contract,
             amount,
@@ -219,12 +227,15 @@ pub fn execute(
             amount,
             expires,
         } => execute_decrease_allowance(deps, env, info, spender, amount, expires),
+        // ExecuteMsg::TransferFrom - Only with "approval" extension.
         ExecuteMsg::TransferFrom {
             owner,
             recipient,
             amount,
         } => execute_transfer_from(deps, env, info, owner, recipient, amount),
+        // ExecuteMsg::BurnFrom - Only with "approval" extension.
         ExecuteMsg::BurnFrom { owner, amount } => execute_burn_from(deps, env, info, owner, amount),
+        // ExecuteMsg::SendFrom - Only with "approval" extension.
         ExecuteMsg::SendFrom {
             owner,
             contract,
@@ -250,12 +261,16 @@ pub fn execute_transfer(
     recipient: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
+    // The transfer needs to have some content
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidZeroAmount {});
     }
 
+    // The address of the recipient should be valid
     let rcpt_addr = deps.api.addr_validate(&recipient)?;
 
+    // The balance of the sender on the ledger will get 'amount' deducted from its balance
+    // If there is no balance, the balance will default() to zero and when subtracting an amount on a Uint will trigger Error
     BALANCES.update(
         deps.storage,
         &info.sender,
@@ -263,12 +278,19 @@ pub fn execute_transfer(
             Ok(balance.unwrap_or_default().checked_sub(amount)?)
         },
     )?;
+
+    // The balance of the receiver on the ledger will get 'amount' added to its balance.
+    // If that address has no balance, it will default() to zero and add the amount.
+
+    // USE CASE 3: Options inside closure
+    // When there is not value in the Option, .unwrap_of_default() let's us work with that field either way.
     BALANCES.update(
         deps.storage,
         &rcpt_addr,
         |balance: Option<Uint128>| -> StdResult<_> { Ok(balance.unwrap_or_default() + amount) },
     )?;
 
+    // Response created with attributes describing the actions perfomed
     let res = Response::new()
         .add_attribute("action", "transfer")
         .add_attribute("from", info.sender)
@@ -283,11 +305,14 @@ pub fn execute_burn(
     info: MessageInfo,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
+    // The amount to burn can not be zero
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidZeroAmount {});
     }
 
     // lower balance
+    // If that address has no balance, it will default() to zero and reduce the amount, which will produce an error.
+    // The closure deals with an Option on Maps.
     BALANCES.update(
         deps.storage,
         &info.sender,
@@ -296,11 +321,14 @@ pub fn execute_burn(
         },
     )?;
     // reduce total_supply
+    // If the reduction is greater that the total supply it will produce an error because info.total_supply is an unsigned integer
+    // The closure deals with the stored struct in Item.
     TOKEN_INFO.update(deps.storage, |mut info| -> StdResult<_> {
         info.total_supply = info.total_supply.checked_sub(amount)?;
         Ok(info)
     })?;
 
+    // Response created with attributes describing the actions perfomed
     let res = Response::new()
         .add_attribute("action", "burn")
         .add_attribute("from", info.sender)
@@ -315,14 +343,23 @@ pub fn execute_mint(
     recipient: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
+    // The amount to mint can not be zero
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidZeroAmount {});
     }
 
+    // If the token has not been set up, an error will be generated. 
+    // This scenario should not happen as the token is generated upon instantiation
     let mut config = TOKEN_INFO
         .may_load(deps.storage)?
         .ok_or(ContractError::Unauthorized {})?;
 
+    // The minter has to be the sender of this message, otherwise error.
+    // config.mint (Option<MinterData>) is turned with as_ref() (Option<&MinterData>)
+    // Option<&MinterData> - > &MinterData The option is turned into a result with .ok_or() unwrapping the result with ?
+    // we can then access the value inside the option, i.e. minter
+
+    // USE CASE 1: Options as a named fields in a struct
     if config
         .mint
         .as_ref()
@@ -343,6 +380,7 @@ pub fn execute_mint(
     TOKEN_INFO.save(deps.storage, &config)?;
 
     // add amount to recipient balance
+    // If the rcpt_addr balance does not exist, it will default() to zero and the minted amount added to its balance
     let rcpt_addr = deps.api.addr_validate(&recipient)?;
     BALANCES.update(
         deps.storage,
@@ -365,6 +403,9 @@ pub fn execute_send(
     amount: Uint128,
     msg: Binary,
 ) -> Result<Response, ContractError> {
+    // To transfer tokens to a contract and trigger an action on the receiving contract, based on the msg param.
+
+    // The amount sent can not be 0
     if amount == Uint128::zero() {
         return Err(ContractError::InvalidZeroAmount {});
     }
@@ -372,6 +413,7 @@ pub fn execute_send(
     let rcpt_addr = deps.api.addr_validate(&contract)?;
 
     // move the tokens to the contract
+    // The tokens are subtracted from the senders balance
     BALANCES.update(
         deps.storage,
         &info.sender,
@@ -379,12 +421,16 @@ pub fn execute_send(
             Ok(balance.unwrap_or_default().checked_sub(amount)?)
         },
     )?;
+
+    // The tokens are registered/added under the contract address
     BALANCES.update(
         deps.storage,
         &rcpt_addr,
         |balance: Option<Uint128>| -> StdResult<_> { Ok(balance.unwrap_or_default() + amount) },
     )?;
 
+    // The contract will receive a message, including sender, amount and ...
+    //the parameter msg included in ExecuteMsg::Send {contract, amount, msg,}
     let res = Response::new()
         .add_attribute("action", "send")
         .add_attribute("from", &info.sender)
@@ -407,15 +453,20 @@ pub fn execute_update_minter(
     info: MessageInfo,
     new_minter: Option<String>,
 ) -> Result<Response, ContractError> {
+    // Load the Token_Info. If it has not been set up (should have been upon instantiation), raise ContractError
     let mut config = TOKEN_INFO
         .may_load(deps.storage)?
         .ok_or(ContractError::Unauthorized {})?;
 
+    // To update the minter the sender must be the minter. We extract the mint from the optional mint
     let mint = config.mint.as_ref().ok_or(ContractError::Unauthorized {})?;
     if mint.minter != info.sender {
         return Err(ContractError::Unauthorized {});
     }
 
+    // Beatiful to see how the Option<String> is turned into an Option<MinterData>
+    // First the address is checked to be correct, then Option<Result> is transposed to Result<Option>, extracting the Option
+    // finally we map the address(option) to a MinterData struct(option).
     let minter_data = new_minter
         .map(|new_minter| deps.api.addr_validate(&new_minter))
         .transpose()?
@@ -428,6 +479,7 @@ pub fn execute_update_minter(
 
     TOKEN_INFO.save(deps.storage, &config)?;
 
+    //the value of the attribute extracts the minter address as a string if it exists.
     Ok(Response::default()
         .add_attribute("action", "update_minter")
         .add_attribute(
@@ -560,7 +612,9 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 }
 
 pub fn query_balance(deps: Deps, address: String) -> StdResult<BalanceResponse> {
+    // The address queried is validated
     let address = deps.api.addr_validate(&address)?;
+    // If there is no balance the value returned will be zero, thanks to .unwrap_or_DEFAULT()
     let balance = BALANCES
         .may_load(deps.storage, &address)?
         .unwrap_or_default();
@@ -568,7 +622,9 @@ pub fn query_balance(deps: Deps, address: String) -> StdResult<BalanceResponse> 
 }
 
 pub fn query_token_info(deps: Deps) -> StdResult<TokenInfoResponse> {
+    // We load the token info
     let info = TOKEN_INFO.load(deps.storage)?;
+    // The TokenInfoResponse is the TokenInfo without the mint field.
     let res = TokenInfoResponse {
         name: info.name,
         symbol: info.symbol,
@@ -579,6 +635,8 @@ pub fn query_token_info(deps: Deps) -> StdResult<TokenInfoResponse> {
 }
 
 pub fn query_minter(deps: Deps) -> StdResult<Option<MinterResponse>> {
+    // Using the let var : Option<_> = match option_var { Some() => Some()}, None => None,
+    // we return the option stored on TOKEN_INFO 
     let meta = TOKEN_INFO.load(deps.storage)?;
     let minter = match meta.mint {
         Some(m) => Some(MinterResponse {
@@ -591,6 +649,8 @@ pub fn query_minter(deps: Deps) -> StdResult<Option<MinterResponse>> {
 }
 
 pub fn query_marketing_info(deps: Deps) -> StdResult<MarketingInfoResponse> {
+    // MarketingInfoResponse is returned. If it does not exist will return default.
+    // As all the fields in MarketingInfoResponse are Options, supposedly, the response will have all options set to None.
     Ok(MARKETING_INFO.may_load(deps.storage)?.unwrap_or_default())
 }
 
